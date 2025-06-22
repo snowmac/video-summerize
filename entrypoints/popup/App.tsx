@@ -131,18 +131,56 @@ const App: React.FC = () => {
     setIsLoading(true);
     setError('');
     setTranscriptResult(null);
-    setSummary('');
     updateProgress(10, 'Checking if on YouTube video page...');
+    
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab.id) throw new Error('No active tab found');
+      
+      if (!tab.id) {
+        throw new Error('No active tab found');
+      }
+
+      // Check if we're on a YouTube page
+      if (!tab.url?.includes('youtube.com/watch')) {
+        throw new Error('Please navigate to a YouTube video page to use this extension.');
+      }
+
+      updateProgress(20, 'Sending message to content script...');
+      
+      // Try to send message to content script
       const response = await chrome.tabs.sendMessage(tab.id, { action: 'extractTranscript' });
-      if (response.error) throw new Error(response.error);
+      
+      if (!response) {
+        throw new Error('No response from content script. The extension may not be properly injected.');
+      }
+      
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      if (!response.transcript) {
+        throw new Error('No transcript found. Please make sure you are on a YouTube video page with available transcripts.');
+      }
+
       setTranscriptResult(response);
       updateProgress(50, 'Transcript extracted successfully!');
-      if (apiKey) await generateSummary(response.transcript || '');
+
+      // If API key is provided, generate summary
+      if (apiKey) {
+        await generateSummary(response.transcript);
+      }
+
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+      console.error('Transcript extraction error:', err);
+      
+      // Check if it's a connection error
+      if (errorMessage.includes('Receiving end does not exist')) {
+        setError('Content script not found. Please refresh the YouTube page and try again.');
+      } else {
+        setError(errorMessage);
+      }
+      
       updateProgress(0, 'Failed to extract transcript');
     } finally {
       setIsLoading(false);
@@ -151,20 +189,141 @@ const App: React.FC = () => {
 
   const generateSummary = async (transcript: string) => {
     updateProgress(60, 'Generating summary...');
+    
+    if (!apiKey) {
+      setError('No API key provided. Please add your API key in settings.');
+      updateProgress(0, 'No API key available');
+      return;
+    }
+
     try {
-      const response = await fetch('/api/summarize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript, aiService, apiKey, customPrompt }),
-      });
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      const data = await response.json();
-      if (data.error) throw new Error(data.error);
-      setSummary(data.summary);
+      let summary = '';
+      
+      if (aiService === 'openai') {
+        summary = await callOpenAI(transcript, apiKey, customPrompt);
+      } else if (aiService === 'anthropic') {
+        summary = await callAnthropic(transcript, apiKey, customPrompt);
+      } else if (aiService === 'grok') {
+        summary = await callGrok(transcript, apiKey, customPrompt);
+      } else {
+        throw new Error(`Unsupported AI service: ${aiService}`);
+      }
+      
+      setSummary(summary);
       updateProgress(100, 'Summary generated successfully!');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate summary');
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+      console.error('Summary generation error:', err);
+      setError(`Failed to generate summary: ${errorMessage}`);
       updateProgress(0, 'Summary generation failed');
+    }
+  };
+
+  const callOpenAI = async (transcript: string, apiKey: string, prompt: string): Promise<string> => {
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: [
+            {
+              role: 'user',
+              content: `${prompt}\n\nTranscript:\n${transcript}`
+            }
+          ],
+          max_tokens: 1000,
+          temperature: 0.7
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`OpenAI API error (${response.status}): ${errorData.error?.message || response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data.choices[0]?.message?.content || 'No response from OpenAI';
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('Failed to fetch')) {
+        throw new Error('Network error: Unable to connect to OpenAI API. Please check your internet connection.');
+      }
+      throw err;
+    }
+  };
+
+  const callAnthropic = async (transcript: string, apiKey: string, prompt: string): Promise<string> => {
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model: 'claude-3-sonnet-20240229',
+          max_tokens: 1000,
+          messages: [
+            {
+              role: 'user',
+              content: `${prompt}\n\nTranscript:\n${transcript}`
+            }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`Anthropic API error (${response.status}): ${errorData.error?.message || response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data.content[0]?.text || 'No response from Anthropic';
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('Failed to fetch')) {
+        throw new Error('Network error: Unable to connect to Anthropic API. Please check your internet connection.');
+      }
+      throw err;
+    }
+  };
+
+  const callGrok = async (transcript: string, apiKey: string, prompt: string): Promise<string> => {
+    try {
+      const response = await fetch('https://api.x.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'grok-beta',
+          messages: [
+            {
+              role: 'user',
+              content: `${prompt}\n\nTranscript:\n${transcript}`
+            }
+          ],
+          max_tokens: 1000,
+          temperature: 0.7
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`xAI Grok API error (${response.status}): ${errorData.error?.message || response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data.choices[0]?.message?.content || 'No response from xAI Grok';
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('Failed to fetch')) {
+        throw new Error('Network error: Unable to connect to xAI Grok API. Please check your internet connection.');
+      }
+      throw err;
     }
   };
 

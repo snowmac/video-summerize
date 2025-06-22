@@ -117,10 +117,15 @@ class YouTubeTranscriptService {
 export default defineContentScript({
   matches: ["*://*.youtube.com/*"],
   main() {
+    console.log("YouTube Transcript Summarizer content script loaded!");
+
     // Listen for messages from the extension
     chrome.runtime.onMessage.addListener(
       (request: any, sender: any, sendResponse: any) => {
+        console.log("Content script received message:", request);
+
         if (request.action === "extractTranscript") {
+          console.log("Handling extractTranscript request...");
           handleTranscriptExtraction(sendResponse);
           return true; // Keep the message channel open for async response
         }

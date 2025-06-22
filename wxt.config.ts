@@ -8,7 +8,12 @@ export default defineConfig({
     description: "Extract and summarize YouTube video transcripts using AI",
     version: "1.0.0",
     permissions: ["activeTab", "storage", "scripting"],
-    host_permissions: ["*://*.youtube.com/*"],
+    host_permissions: [
+      "*://*.youtube.com/*",
+      "https://api.openai.com/*",
+      "https://api.anthropic.com/*",
+      "https://api.x.ai/*",
+    ],
     action: {
       default_popup: "popup.html",
       default_title: "YouTube Transcript Summarizer",
