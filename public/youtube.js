@@ -1,5 +1,8 @@
-// YouTube Transcript Service
 class YouTubeTranscriptService {
+  constructor() {
+    this.transcriptData = null;
+  }
+
   async extractTranscript() {
     try {
       // Check if we're on a YouTube video page
@@ -28,21 +31,21 @@ class YouTubeTranscriptService {
     } catch (error) {
       return {
         success: false,
-        error: (error as Error).message,
+        error: error.message,
         videoTitle: this.getVideoTitle(),
         videoUrl: window.location.href,
       };
     }
   }
 
-  isYouTubeVideoPage(): boolean {
+  isYouTubeVideoPage() {
     return (
       window.location.hostname === "www.youtube.com" &&
       window.location.pathname === "/watch"
     );
   }
 
-  async waitForTranscriptButton(): Promise<Element> {
+  async waitForTranscriptButton() {
     return new Promise((resolve, reject) => {
       const maxAttempts = 50;
       let attempts = 0;
@@ -72,7 +75,7 @@ class YouTubeTranscriptService {
     });
   }
 
-  async openTranscriptPanel(): Promise<void> {
+  async openTranscriptPanel() {
     const transcriptButton = await this.waitForTranscriptButton();
 
     // Check if transcript panel is already open
@@ -84,7 +87,7 @@ class YouTubeTranscriptService {
     }
 
     // Click the transcript button
-    (transcriptButton as HTMLElement).click();
+    transcriptButton.click();
 
     // Wait for the transcript panel to appear
     await new Promise((resolve, reject) => {
@@ -114,7 +117,7 @@ class YouTubeTranscriptService {
     });
   }
 
-  async extractTranscriptText(): Promise<string> {
+  async extractTranscriptText() {
     // Wait a bit for the transcript to load
     await new Promise((resolve) => setTimeout(resolve, 500));
 
@@ -137,17 +140,17 @@ class YouTubeTranscriptService {
     return this.extractFromSegments(transcriptSegments);
   }
 
-  extractFromSegments(segments: NodeListOf<Element>): string {
-    const transcriptParts: string[] = [];
+  extractFromSegments(segments) {
+    const transcriptParts = [];
 
-    segments.forEach((segment: Element) => {
+    segments.forEach((segment) => {
       // Get the text content of the segment
       const textElement =
         segment.querySelector('[data-testid="transcript-segment-text"]') ||
         segment.querySelector(".ytd-transcript-segment-renderer-text");
 
       if (textElement) {
-        const text = textElement.textContent?.trim();
+        const text = textElement.textContent.trim();
         if (text) {
           transcriptParts.push(text);
         }
@@ -161,7 +164,7 @@ class YouTubeTranscriptService {
     return transcriptParts.join(" ");
   }
 
-  async closeTranscriptPanel(): Promise<void> {
+  async closeTranscriptPanel() {
     // Find and click the close button for the transcript panel
     const closeButton =
       document.querySelector(
@@ -172,61 +175,23 @@ class YouTubeTranscriptService {
       );
 
     if (closeButton) {
-      (closeButton as HTMLElement).click();
+      closeButton.click();
     }
   }
 
-  getVideoTitle(): string {
+  getVideoTitle() {
     const titleElement =
       document.querySelector("h1.ytd-video-primary-info-renderer") ||
       document.querySelector("h1.title") ||
       document.querySelector("h1");
 
-    return titleElement?.textContent?.trim() || "Unknown Video";
+    return titleElement ? titleElement.textContent.trim() : "Unknown Video";
   }
 }
 
-// Content script main function
-export default defineContentScript({
-  matches: ["*://*.youtube.com/*"],
-  main() {
-    // Listen for messages from the extension
-    browser.runtime.onMessage.addListener(
-      (request: any, sender: any, sendResponse: any) => {
-        if (request.action === "extractTranscript") {
-          handleTranscriptExtraction(sendResponse);
-          return true; // Keep the message channel open for async response
-        }
-      }
-    );
-
-    async function handleTranscriptExtraction(sendResponse: any) {
-      try {
-        // Check if we're on a YouTube video page
-        if (
-          window.location.hostname !== "www.youtube.com" ||
-          window.location.pathname !== "/watch"
-        ) {
-          sendResponse({
-            success: false,
-            error: "Not on a YouTube video page",
-          });
-          return;
-        }
-
-        // Create instance of the transcript service
-        const transcriptService = new YouTubeTranscriptService();
-
-        // Extract the transcript
-        const result = await transcriptService.extractTranscript();
-
-        sendResponse(result);
-      } catch (error) {
-        sendResponse({
-          success: false,
-          error: (error as Error).message,
-        });
-      }
-    }
-  },
-});
+// Export for use in the extension
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = YouTubeTranscriptService;
+} else {
+  window.YouTubeTranscriptService = YouTubeTranscriptService;
+}

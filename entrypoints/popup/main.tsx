@@ -1,10 +1,36 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App.tsx';
-import './style.css';
+import { createRoot } from 'react-dom/client';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
+import App from './App';
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
+const theme = createTheme({
+  palette: {
+    mode: 'light',
+    primary: {
+      main: '#1976d2',
+    },
+    secondary: {
+      main: '#dc004e',
+    },
+  },
+  typography: {
+    fontSize: 14,
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          textTransform: 'none',
+        },
+      },
+    },
+  },
+});
+
+const root = createRoot(document.getElementById('root')!);
+root.render(
+  <ThemeProvider theme={theme}>
+    <CssBaseline />
     <App />
-  </React.StrictMode>,
+  </ThemeProvider>
 );
