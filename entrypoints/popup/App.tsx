@@ -357,8 +357,8 @@ const App: React.FC = () => {
 
   const callHuggingFace = async (transcript: string, apiKey: string, prompt: string): Promise<string> => {
     try {
-      // Using a good summarization model
-      const model = 'microsoft/DialoGPT-medium'; // You can change this to other models
+      // Using a proper summarization model
+      const model = 'facebook/bart-large-cnn'; // Better for summarization
       
       const response = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
         method: 'POST',
@@ -367,11 +367,11 @@ const App: React.FC = () => {
           'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          inputs: `${prompt}\n\nTranscript:\n${transcript}`,
+          inputs: transcript, // Just send the transcript, the model will summarize it
           parameters: {
             max_length: 500,
-            temperature: 0.7,
-            do_sample: true
+            min_length: 100,
+            do_sample: false
           }
         })
       });
@@ -383,13 +383,13 @@ const App: React.FC = () => {
 
       const data = await response.json();
       
-      // Hugging Face returns different formats depending on the model
+      // BART model returns an array with summary_text
       if (Array.isArray(data) && data.length > 0) {
-        return data[0].generated_text || data[0].summary_text || 'No response from Hugging Face';
-      } else if (data.generated_text) {
-        return data.generated_text;
+        return data[0].summary_text || 'No summary generated';
       } else if (data.summary_text) {
         return data.summary_text;
+      } else if (data.generated_text) {
+        return data.generated_text;
       } else {
         return 'No response from Hugging Face';
       }
