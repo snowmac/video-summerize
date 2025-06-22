@@ -18,13 +18,30 @@ import {
   Select,
   MenuItem,
   Switch,
-  FormControlLabel
+  FormControlLabel,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails
 } from '@mui/material';
 import {
   PlayArrow as PlayIcon,
   Settings as SettingsIcon,
   ContentCopy as CopyIcon,
-  Check as CheckIcon
+  Check as CheckIcon,
+  Help as HelpIcon,
+  ExpandMore as ExpandMoreIcon,
+  Link as LinkIcon,
+  Key as KeyIcon,
+  AccountCircle as AccountIcon,
+  OpenInNew as OpenInNewIcon
 } from '@mui/icons-material';
 import { marked } from 'marked';
 
@@ -60,6 +77,12 @@ const AI_SERVICES: AIService[] = [
     name: 'Anthropic Claude',
     defaultPrompt: 'Please analyze and summarize this YouTube video transcript, highlighting the main topics and key takeaways.',
     apiEndpoint: 'https://api.anthropic.com/v1/messages'
+  },
+  {
+    id: 'grok',
+    name: 'xAI Grok',
+    defaultPrompt: 'Please summarize this YouTube video transcript in a clear and concise manner.',
+    apiEndpoint: 'https://api.x.ai/v1/chat/completions'
   }
 ];
 
@@ -72,11 +95,14 @@ function App() {
   const [summary, setSummary] = useState('');
   const [error, setError] = useState('');
   const [showSettings, setShowSettings] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [selectedAIService, setSelectedAIService] = useState('default');
   const [customPrompt, setCustomPrompt] = useState('');
   const [useCustomPrompt, setUseCustomPrompt] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [showCopied, setShowCopied] = useState(false);
+  const [showSaveNotification, setShowSaveNotification] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
     // Get current tab
@@ -102,6 +128,12 @@ function App() {
       useCustomPrompt,
       apiKey
     });
+    setShowSaveNotification(true);
+    setShowSettings(false); // Close settings and return to main screen
+  };
+
+  const openUrl = (url: string) => {
+    browser.tabs.create({ url });
   };
 
   const updateProgress = (value: number, message: string) => {
@@ -119,6 +151,7 @@ function App() {
     setError('');
     setTranscriptResult(null);
     setSummary('');
+    setIsExpanded(false);
     updateProgress(10, 'Checking if on YouTube video page...');
 
     try {
@@ -179,6 +212,7 @@ function App() {
 
       setSummary(mockSummary);
       updateProgress(100, 'Summary generated successfully!');
+      setIsExpanded(true); // Expand the overlay for better reading
     } catch (error) {
       setError('Failed to generate summary');
       updateProgress(0, 'Summary generation failed');
@@ -202,11 +236,20 @@ function App() {
   const isYouTubePage = currentTab?.url?.includes('youtube.com/watch');
 
   return (
-    <Box sx={{ width: 400, p: 2 }}>
+    <Box sx={{ 
+      width: isExpanded ? '70vw' : 400, 
+      maxWidth: isExpanded ? '70vw' : 400,
+      minWidth: isExpanded ? '50vw' : 400,
+      p: 2,
+      transition: 'all 0.3s ease-in-out'
+    }}>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
         <Typography variant="h6" sx={{ flexGrow: 1 }}>
           YouTube Transcript Summarizer
         </Typography>
+        <IconButton onClick={() => setShowHelp(true)}>
+          <HelpIcon />
+        </IconButton>
         <IconButton onClick={() => setShowSettings(!showSettings)}>
           <SettingsIcon />
         </IconButton>
@@ -310,7 +353,7 @@ function App() {
           </Typography>
           <Box
             sx={{
-              maxHeight: 200,
+              maxHeight: isExpanded ? 300 : 200,
               overflow: 'auto',
               border: '1px solid #ddd',
               borderRadius: 1,
@@ -342,7 +385,7 @@ function App() {
           </Box>
           <Box
             sx={{
-              maxHeight: 300,
+              maxHeight: isExpanded ? 500 : 300,
               overflow: 'auto',
               border: '1px solid #ddd',
               borderRadius: 1,
@@ -353,6 +396,216 @@ function App() {
         </Paper>
       )}
 
+      {/* Help Dialog */}
+      <Dialog 
+        open={showHelp} 
+        onClose={() => setShowHelp(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <HelpIcon sx={{ mr: 1 }} />
+            How to Get API Keys
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mb: 3 }}>
+            To use external AI services, you'll need to obtain API keys from the respective providers. 
+            Here's how to get them:
+          </Typography>
+
+          <Accordion>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <ListItemIcon>
+                <KeyIcon />
+              </ListItemIcon>
+              <ListItemText primary="OpenAI ChatGPT" />
+            </AccordionSummary>
+            <AccordionDetails>
+              <List dense>
+                <ListItem>
+                  <ListItemIcon>
+                    <LinkIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Visit OpenAI Platform" 
+                    secondary="Go to https://platform.openai.com/api-keys"
+                  />
+                  <IconButton 
+                    size="small" 
+                    onClick={() => openUrl('https://platform.openai.com/api-keys')}
+                  >
+                    <OpenInNewIcon />
+                  </IconButton>
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon>
+                    <AccountIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Sign in or Create Account" 
+                    secondary="Log in to your OpenAI account or create a new one"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon>
+                    <KeyIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Create API Key" 
+                    secondary="Click 'Create new secret key' and copy the generated key"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon>
+                    <KeyIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Add Payment Method" 
+                    secondary="Add a payment method to your account (OpenAI charges per request)"
+                  />
+                </ListItem>
+              </List>
+            </AccordionDetails>
+          </Accordion>
+
+          <Accordion>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <ListItemIcon>
+                <KeyIcon />
+              </ListItemIcon>
+              <ListItemText primary="Anthropic Claude" />
+            </AccordionSummary>
+            <AccordionDetails>
+              <List dense>
+                <ListItem>
+                  <ListItemIcon>
+                    <LinkIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Visit Anthropic Console" 
+                    secondary="Go to https://console.anthropic.com/"
+                  />
+                  <IconButton 
+                    size="small" 
+                    onClick={() => openUrl('https://console.anthropic.com/')}
+                  >
+                    <OpenInNewIcon />
+                  </IconButton>
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon>
+                    <AccountIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Sign in or Create Account" 
+                    secondary="Log in to your Anthropic account or create a new one"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon>
+                    <KeyIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Create API Key" 
+                    secondary="Navigate to 'API Keys' and click 'Create Key'"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon>
+                    <KeyIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Copy the Key" 
+                    secondary="Copy the generated API key (starts with 'sk-ant-')"
+                  />
+                </ListItem>
+              </List>
+            </AccordionDetails>
+          </Accordion>
+
+          <Accordion>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <ListItemIcon>
+                <KeyIcon />
+              </ListItemIcon>
+              <ListItemText primary="xAI Grok" />
+            </AccordionSummary>
+            <AccordionDetails>
+              <List dense>
+                <ListItem>
+                  <ListItemIcon>
+                    <LinkIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Visit xAI Platform" 
+                    secondary="Go to https://console.x.ai/"
+                  />
+                  <IconButton 
+                    size="small" 
+                    onClick={() => openUrl('https://console.x.ai/')}
+                  >
+                    <OpenInNewIcon />
+                  </IconButton>
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon>
+                    <AccountIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Sign in with X/Twitter" 
+                    secondary="Log in using your X (Twitter) account"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon>
+                    <KeyIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Create API Key" 
+                    secondary="Navigate to 'API Keys' and create a new key"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon>
+                    <KeyIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Copy the Key" 
+                    secondary="Copy the generated API key"
+                  />
+                </ListItem>
+              </List>
+            </AccordionDetails>
+          </Accordion>
+
+          <Alert severity="info" sx={{ mt: 2 }}>
+            <Typography variant="body2">
+              <strong>Security Note:</strong> Your API keys are stored locally in your browser and are only used to make requests to the respective AI services. 
+              Never share your API keys publicly.
+            </Typography>
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowHelp(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Save Notification */}
+      <Snackbar
+        open={showSaveNotification}
+        autoHideDuration={3000}
+        onClose={() => setShowSaveNotification(false)}
+        message="Settings saved successfully!"
+        action={
+          <IconButton size="small" color="inherit">
+            <CheckIcon />
+          </IconButton>
+        }
+      />
+
+      {/* Copy Notification */}
       <Snackbar
         open={showCopied}
         autoHideDuration={2000}
