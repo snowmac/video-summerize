@@ -149,7 +149,32 @@ const App: React.FC = () => {
       updateProgress(20, 'Sending message to content script...');
       
       // Try to send message to content script
-      const response = await chrome.tabs.sendMessage(tab.id, { action: 'extractTranscript' });
+      let response;
+      try {
+        response = await chrome.tabs.sendMessage(tab.id, { action: 'extractTranscript' });
+      } catch (err) {
+        // If content script is not found, try to inject it manually
+        if (err instanceof Error && err.message.includes('Receiving end does not exist')) {
+          updateProgress(25, 'Content script not found, attempting to inject...');
+          
+          try {
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              files: ['content-scripts/content.js']
+            });
+            
+            // Wait a moment for the script to load
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Try again
+            response = await chrome.tabs.sendMessage(tab.id, { action: 'extractTranscript' });
+          } catch (injectionError) {
+            throw new Error('Failed to inject content script. Please refresh the YouTube page and try again.');
+          }
+        } else {
+          throw err;
+        }
+      }
       
       if (!response) {
         throw new Error('No response from content script. The extension may not be properly injected.');
