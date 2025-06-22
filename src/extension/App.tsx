@@ -35,10 +35,8 @@ import {
 } from '@mui/material';
 import {
   PlayArrow as PlayIcon,
-  Settings as SettingsIcon,
   ContentCopy as CopyIcon,
   Check as CheckIcon,
-  Help as HelpIcon,
   ExpandMore as ExpandMoreIcon,
   Link as LinkIcon,
   Key as KeyIcon,
@@ -46,7 +44,8 @@ import {
   OpenInNew as OpenInNewIcon,
   Save as SaveIcon
 } from '@mui/icons-material';
-import { marked } from 'marked';
+import HelpIconButton from './HelpIconButton';
+import SettingsIconButton from './SettingsIconButton';
 import SettingsDialog from './SettingsDialog';
 import HelpDialog from './HelpDialog';
 import TranscriptPanel from './TranscriptPanel';
@@ -180,8 +179,8 @@ const App: React.FC = () => {
     <Box sx={{ width: 600, p: 2 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
         <Typography variant="h6" sx={{ flexGrow: 1 }}>YouTube Transcript Summarizer</Typography>
-        <IconButton onClick={() => setShowHelp(true)}><HelpIcon /></IconButton>
-        <IconButton onClick={() => setShowSettings(true)}><SettingsIcon /></IconButton>
+        <HelpIconButton onClick={() => setShowHelp(true)} />
+        <SettingsIconButton onClick={() => setShowSettings(true)} />
       </Box>
       <StatusBar isLoading={isLoading} status={status} progress={progress} />
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
