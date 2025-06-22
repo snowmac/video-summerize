@@ -1,3 +1,7 @@
+// @ts-ignore
+// eslint-disable-next-line
+declare const chrome: any;
+
 // YouTube Transcript Service (included directly in content script)
 class YouTubeTranscriptService {
   async extractTranscript() {
@@ -114,7 +118,7 @@ export default defineContentScript({
   matches: ["*://*.youtube.com/*"],
   main() {
     // Listen for messages from the extension
-    browser.runtime.onMessage.addListener(
+    chrome.runtime.onMessage.addListener(
       (request: any, sender: any, sendResponse: any) => {
         if (request.action === "extractTranscript") {
           handleTranscriptExtraction(sendResponse);

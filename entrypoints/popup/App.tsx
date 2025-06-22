@@ -1,5 +1,6 @@
-// Type declaration for browser API
-declare const browser: any;
+// @ts-ignore
+// eslint-disable-next-line
+declare const chrome: any;
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -41,7 +42,8 @@ import {
   Link as LinkIcon,
   Key as KeyIcon,
   AccountCircle as AccountIcon,
-  OpenInNew as OpenInNewIcon
+  OpenInNew as OpenInNewIcon,
+  Save as SaveIcon
 } from '@mui/icons-material';
 import { marked } from 'marked';
 
@@ -86,8 +88,7 @@ const AI_SERVICES: AIService[] = [
   }
 ];
 
-function App() {
-  const [currentTab, setCurrentTab] = useState<any>(null);
+const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('');
@@ -96,44 +97,29 @@ function App() {
   const [error, setError] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const [selectedAIService, setSelectedAIService] = useState('default');
-  const [customPrompt, setCustomPrompt] = useState('');
-  const [useCustomPrompt, setUseCustomPrompt] = useState(false);
+  const [aiService, setAiService] = useState('openai');
   const [apiKey, setApiKey] = useState('');
+  const [customPrompt, setCustomPrompt] = useState('Please provide a comprehensive summary of this transcript, highlighting the key points and main topics discussed.');
   const [showCopied, setShowCopied] = useState(false);
   const [showSaveNotification, setShowSaveNotification] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
-    // Get current tab
-    browser.tabs.query({ active: true, currentWindow: true }).then((tabs: any) => {
-      if (tabs[0]) {
-        setCurrentTab(tabs[0]);
-      }
-    });
-
-    // Load saved settings
-    browser.storage.sync.get(['selectedAIService', 'customPrompt', 'useCustomPrompt', 'apiKey']).then((result: any) => {
-      if (result.selectedAIService) setSelectedAIService(result.selectedAIService);
-      if (result.customPrompt) setCustomPrompt(result.customPrompt);
-      if (result.useCustomPrompt !== undefined) setUseCustomPrompt(result.useCustomPrompt);
+    chrome.storage.sync.get(['aiService', 'apiKey', 'customPrompt'], (result: { aiService?: string; apiKey?: string; customPrompt?: string }) => {
+      if (result.aiService) setAiService(result.aiService);
       if (result.apiKey) setApiKey(result.apiKey);
+      if (result.customPrompt) setCustomPrompt(result.customPrompt);
     });
   }, []);
 
   const saveSettings = () => {
-    browser.storage.sync.set({
-      selectedAIService,
-      customPrompt,
-      useCustomPrompt,
-      apiKey
+    chrome.storage.sync.set({ aiService, apiKey, customPrompt }, () => {
+      setShowSaveNotification(true);
+      setShowSettings(false);
     });
-    setShowSaveNotification(true);
-    setShowSettings(false); // Close settings and return to main screen
   };
 
   const openUrl = (url: string) => {
-    browser.tabs.create({ url });
+    chrome.tabs.create({ url });
   };
 
   const updateProgress = (value: number, message: string) => {
@@ -142,37 +128,22 @@ function App() {
   };
 
   const extractTranscript = async () => {
-    if (!currentTab?.id) {
-      setError('No active tab found');
-      return;
-    }
-
     setIsLoading(true);
     setError('');
     setTranscriptResult(null);
     setSummary('');
-    setIsExpanded(false);
     updateProgress(10, 'Checking if on YouTube video page...');
-
     try {
-      // Send message to content script
-      const response = await browser.tabs.sendMessage(currentTab.id, {
-        action: 'extractTranscript'
-      });
-
-      if (response.success) {
-        setTranscriptResult(response);
-        updateProgress(50, 'Transcript extracted successfully!');
-        
-        // Generate summary
-        await generateSummary(response.transcript || '');
-      } else {
-        setError(response.error || 'Failed to extract transcript');
-        updateProgress(0, 'Failed to extract transcript');
-      }
-    } catch (error) {
-      setError('Failed to communicate with content script. Make sure you are on a YouTube video page.');
-      updateProgress(0, 'Communication error');
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab.id) throw new Error('No active tab found');
+      const response = await chrome.tabs.sendMessage(tab.id, { action: 'extractTranscript' });
+      if (response.error) throw new Error(response.error);
+      setTranscriptResult(response);
+      updateProgress(50, 'Transcript extracted successfully!');
+      if (apiKey) await generateSummary(response.transcript || '');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+      updateProgress(0, 'Failed to extract transcript');
     } finally {
       setIsLoading(false);
     }
@@ -180,41 +151,19 @@ function App() {
 
   const generateSummary = async (transcript: string) => {
     updateProgress(60, 'Generating summary...');
-
     try {
-      const selectedService = AI_SERVICES.find(service => service.id === selectedAIService);
-      const prompt = useCustomPrompt && customPrompt 
-        ? customPrompt 
-        : selectedService?.defaultPrompt || 'Please summarize this video transcript from YouTube';
-
-      // For now, we'll simulate AI processing
-      // In a real implementation, you would call the actual AI API
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      const mockSummary = `# Summary of "${transcriptResult?.videoTitle || 'YouTube Video'}"
-
-## Key Points
-- This is a simulated summary of the video transcript
-- The actual implementation would call ${selectedService?.name || 'Default AI'}
-- The transcript contains approximately ${transcript.split(' ').length} words
-
-## Main Topics
-- Topic 1: [Extracted from transcript]
-- Topic 2: [Extracted from transcript]
-- Topic 3: [Extracted from transcript]
-
-## Key Takeaways
-- Takeaway 1: [Generated from transcript analysis]
-- Takeaway 2: [Generated from transcript analysis]
-- Takeaway 3: [Generated from transcript analysis]
-
-*This summary was generated using the YouTube Transcript Summarizer extension.*`;
-
-      setSummary(mockSummary);
+      const response = await fetch('/api/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript, aiService, apiKey, customPrompt }),
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      if (data.error) throw new Error(data.error);
+      setSummary(data.summary);
       updateProgress(100, 'Summary generated successfully!');
-      setIsExpanded(true); // Expand the overlay for better reading
-    } catch (error) {
-      setError('Failed to generate summary');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate summary');
       updateProgress(0, 'Summary generation failed');
     }
   };
@@ -233,392 +182,148 @@ function App() {
     }
   };
 
-  const isYouTubePage = currentTab?.url?.includes('youtube.com/watch');
+  if (showSettings) {
+    return (
+      <Box sx={{ width: 400, p: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h6">Settings</Typography>
+          <IconButton onClick={() => setShowSettings(false)}>
+            <SettingsIcon />
+          </IconButton>
+        </Box>
+        <Typography variant="subtitle2" sx={{ mb: 1 }}>AI Service</Typography>
+        <select value={aiService} onChange={e => setAiService(e.target.value)} style={{ width: '100%', marginBottom: 16, padding: 8 }}>
+          {AI_SERVICES.map(service => (
+            <option key={service.id} value={service.id}>{service.name}</option>
+          ))}
+        </select>
+        <TextField
+          fullWidth
+          label="API Key"
+          type="password"
+          value={apiKey}
+          onChange={e => setApiKey(e.target.value)}
+          margin="normal"
+          helperText="Your API key will be stored securely in browser storage"
+        />
+        <TextField
+          fullWidth
+          label="Custom Prompt"
+          multiline
+          rows={4}
+          value={customPrompt}
+          onChange={e => setCustomPrompt(e.target.value)}
+          margin="normal"
+          helperText="Customize how the AI should summarize the transcript"
+        />
+        <Button fullWidth variant="contained" onClick={saveSettings} startIcon={<SaveIcon />} sx={{ mt: 2 }}>Save Settings</Button>
+      </Box>
+    );
+  }
 
   return (
-    <Box sx={{ 
-      width: isExpanded ? '70vw' : 400, 
-      maxWidth: isExpanded ? '70vw' : 400,
-      minWidth: isExpanded ? '50vw' : 400,
-      p: 2,
-      transition: 'all 0.3s ease-in-out'
-    }}>
+    <Box sx={{ width: 400, p: 2 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6" sx={{ flexGrow: 1 }}>
-          YouTube Transcript Summarizer
-        </Typography>
-        <IconButton onClick={() => setShowHelp(true)}>
-          <HelpIcon />
-        </IconButton>
-        <IconButton onClick={() => setShowSettings(!showSettings)}>
-          <SettingsIcon />
-        </IconButton>
+        <Typography variant="h6" sx={{ flexGrow: 1 }}>YouTube Transcript Summarizer</Typography>
+        <IconButton onClick={() => setShowHelp(true)}><HelpIcon /></IconButton>
+        <IconButton onClick={() => setShowSettings(true)}><SettingsIcon /></IconButton>
       </Box>
-
-      {!isYouTubePage && (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          Please navigate to a YouTube video page to use this extension.
-        </Alert>
-      )}
-
-      {showSettings && (
-        <Paper sx={{ p: 2, mb: 2 }}>
-          <Typography variant="h6" sx={{ mb: 2 }}>Settings</Typography>
-          
-          <FormControl fullWidth sx={{ mb: 2 }}>
-            <InputLabel>AI Service</InputLabel>
-            <Select
-              value={selectedAIService}
-              onChange={(e) => setSelectedAIService(e.target.value)}
-              label="AI Service"
-            >
-              {AI_SERVICES.map(service => (
-                <MenuItem key={service.id} value={service.id}>
-                  {service.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          <FormControlLabel
-            control={
-              <Switch
-                checked={useCustomPrompt}
-                onChange={(e) => setUseCustomPrompt(e.target.checked)}
-              />
-            }
-            label="Use custom prompt"
-            sx={{ mb: 2 }}
-          />
-
-          {useCustomPrompt && (
-            <TextField
-              fullWidth
-              multiline
-              rows={3}
-              label="Custom Prompt"
-              value={customPrompt}
-              onChange={(e) => setCustomPrompt(e.target.value)}
-              sx={{ mb: 2 }}
-            />
-          )}
-
-          {selectedAIService !== 'default' && (
-            <TextField
-              fullWidth
-              label="API Key"
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              sx={{ mb: 2 }}
-            />
-          )}
-
-          <Button variant="contained" onClick={saveSettings}>
-            Save Settings
-          </Button>
-        </Paper>
-      )}
-
-      <Button
-        fullWidth
-        variant="contained"
-        startIcon={<PlayIcon />}
-        onClick={extractTranscript}
-        disabled={isLoading || !isYouTubePage}
-        sx={{ mb: 2 }}
-      >
-        {isLoading ? 'Processing...' : 'Extract & Summarize'}
-      </Button>
-
-      {isLoading && (
+      {(isLoading || status) && (
         <Box sx={{ mb: 2 }}>
-          <LinearProgress variant="determinate" value={progress} sx={{ mb: 1 }} />
-          <Typography variant="body2" color="text.secondary">
-            {status}
-          </Typography>
+          <LinearProgress variant={isLoading ? 'indeterminate' : 'determinate'} value={progress} sx={{ mb: 1 }} />
+          <Typography variant="body2" color="text.secondary">{status}</Typography>
         </Box>
       )}
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
-
-      {transcriptResult && (
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {!transcriptResult ? (
+        <Button
+          fullWidth
+          variant="contained"
+          startIcon={<PlayIcon />}
+          onClick={extractTranscript}
+          disabled={isLoading}
+          sx={{ mb: 2 }}
+        >
+          {isLoading ? 'Processing...' : 'Extract & Summarize'}
+        </Button>
+      ) : null}
+      {transcriptResult && transcriptResult.transcript && (
         <Paper sx={{ p: 2, mb: 2 }}>
-          <Typography variant="h6" sx={{ mb: 1 }}>
-            Transcript
-          </Typography>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Transcript</Typography>
           <Box
-            sx={{
-              maxHeight: isExpanded ? 300 : 200,
-              overflow: 'auto',
-              border: '1px solid #ddd',
-              borderRadius: 1,
-              p: 1,
-              cursor: 'pointer',
-              '&:hover': { backgroundColor: '#f5f5f5' }
-            }}
+            sx={{ maxHeight: 200, overflow: 'auto', border: '1px solid #ddd', borderRadius: 1, p: 1, cursor: 'pointer', '&:hover': { backgroundColor: '#f5f5f5' } }}
             onClick={copyTranscript}
           >
-            <Typography variant="body2">
-              {transcriptResult.transcript}
-            </Typography>
+            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{transcriptResult.transcript}</Typography>
           </Box>
-          <Typography variant="caption" color="text.secondary">
-            Click to copy transcript
-          </Typography>
+          <Typography variant="caption" color="text.secondary">Click to copy transcript</Typography>
         </Paper>
       )}
-
       {summary && (
         <Paper sx={{ p: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-            <Typography variant="h6" sx={{ flexGrow: 1 }}>
-              Summary
-            </Typography>
-            <IconButton onClick={copySummary} size="small">
-              <CopyIcon />
-            </IconButton>
+            <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>AI Summary</Typography>
+            <IconButton onClick={copySummary} size="small"><CopyIcon /></IconButton>
           </Box>
-          <Box
-            sx={{
-              maxHeight: isExpanded ? 500 : 300,
-              overflow: 'auto',
-              border: '1px solid #ddd',
-              borderRadius: 1,
-              p: 1
-            }}
+          <Box sx={{ maxHeight: 300, overflow: 'auto', border: '1px solid #ddd', borderRadius: 1, p: 1 }}
             dangerouslySetInnerHTML={{ __html: marked(summary) }}
           />
         </Paper>
       )}
-
-      {/* Help Dialog */}
-      <Dialog 
-        open={showHelp} 
-        onClose={() => setShowHelp(false)}
-        maxWidth="md"
-        fullWidth
-      >
+      {transcriptResult && (
+        <Button fullWidth variant="outlined" sx={{ mt: 2 }} onClick={() => { setTranscriptResult(null); setSummary(''); setStatus(''); setProgress(0); }}>Extract New Transcript</Button>
+      )}
+      <Dialog open={showHelp} onClose={() => setShowHelp(false)} maxWidth="md" fullWidth>
         <DialogTitle>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <HelpIcon sx={{ mr: 1 }} />
-            How to Get API Keys
+            <HelpIcon sx={{ mr: 1 }} /> How to Get API Keys
           </Box>
         </DialogTitle>
         <DialogContent>
           <Typography variant="body1" sx={{ mb: 3 }}>
-            To use external AI services, you'll need to obtain API keys from the respective providers. 
-            Here's how to get them:
+            To use external AI services, you'll need to obtain API keys from the respective providers. Here's how to get them:
           </Typography>
-
           <Accordion>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <ListItemIcon>
-                <KeyIcon />
-              </ListItemIcon>
-              <ListItemText primary="OpenAI ChatGPT" />
-            </AccordionSummary>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}><ListItemIcon><KeyIcon /></ListItemIcon><ListItemText primary="OpenAI ChatGPT" /></AccordionSummary>
             <AccordionDetails>
               <List dense>
-                <ListItem>
-                  <ListItemIcon>
-                    <LinkIcon />
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary="Visit OpenAI Platform" 
-                    secondary="Go to https://platform.openai.com/api-keys"
-                  />
-                  <IconButton 
-                    size="small" 
-                    onClick={() => openUrl('https://platform.openai.com/api-keys')}
-                  >
-                    <OpenInNewIcon />
-                  </IconButton>
-                </ListItem>
-                <ListItem>
-                  <ListItemIcon>
-                    <AccountIcon />
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary="Sign in or Create Account" 
-                    secondary="Log in to your OpenAI account or create a new one"
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemIcon>
-                    <KeyIcon />
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary="Create API Key" 
-                    secondary="Click 'Create new secret key' and copy the generated key"
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemIcon>
-                    <KeyIcon />
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary="Add Payment Method" 
-                    secondary="Add a payment method to your account (OpenAI charges per request)"
-                  />
-                </ListItem>
+                <ListItem><ListItemIcon><LinkIcon /></ListItemIcon><ListItemText primary="Visit OpenAI Platform" secondary="Go to https://platform.openai.com/api-keys" /><IconButton size="small" onClick={() => openUrl('https://platform.openai.com/api-keys')}><OpenInNewIcon /></IconButton></ListItem>
+                <ListItem><ListItemIcon><AccountIcon /></ListItemIcon><ListItemText primary="Sign in or Create Account" secondary="Log in to your OpenAI account or create a new one" /></ListItem>
+                <ListItem><ListItemIcon><KeyIcon /></ListItemIcon><ListItemText primary="Create API Key" secondary="Click 'Create new secret key' and copy the generated key" /></ListItem>
+                <ListItem><ListItemIcon><KeyIcon /></ListItemIcon><ListItemText primary="Add Payment Method" secondary="Add a payment method to your account (OpenAI charges per request)" /></ListItem>
               </List>
             </AccordionDetails>
           </Accordion>
-
           <Accordion>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <ListItemIcon>
-                <KeyIcon />
-              </ListItemIcon>
-              <ListItemText primary="Anthropic Claude" />
-            </AccordionSummary>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}><ListItemIcon><KeyIcon /></ListItemIcon><ListItemText primary="Anthropic Claude" /></AccordionSummary>
             <AccordionDetails>
               <List dense>
-                <ListItem>
-                  <ListItemIcon>
-                    <LinkIcon />
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary="Visit Anthropic Console" 
-                    secondary="Go to https://console.anthropic.com/"
-                  />
-                  <IconButton 
-                    size="small" 
-                    onClick={() => openUrl('https://console.anthropic.com/')}
-                  >
-                    <OpenInNewIcon />
-                  </IconButton>
-                </ListItem>
-                <ListItem>
-                  <ListItemIcon>
-                    <AccountIcon />
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary="Sign in or Create Account" 
-                    secondary="Log in to your Anthropic account or create a new one"
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemIcon>
-                    <KeyIcon />
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary="Create API Key" 
-                    secondary="Navigate to 'API Keys' and click 'Create Key'"
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemIcon>
-                    <KeyIcon />
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary="Copy the Key" 
-                    secondary="Copy the generated API key (starts with 'sk-ant-')"
-                  />
-                </ListItem>
+                <ListItem><ListItemIcon><LinkIcon /></ListItemIcon><ListItemText primary="Visit Anthropic Console" secondary="Go to https://console.anthropic.com/" /><IconButton size="small" onClick={() => openUrl('https://console.anthropic.com/')}><OpenInNewIcon /></IconButton></ListItem>
+                <ListItem><ListItemIcon><AccountIcon /></ListItemIcon><ListItemText primary="Sign in or Create Account" secondary="Log in to your Anthropic account or create a new one" /></ListItem>
+                <ListItem><ListItemIcon><KeyIcon /></ListItemIcon><ListItemText primary="Create API Key" secondary="Navigate to 'API Keys' and click 'Create Key'" /></ListItem>
+                <ListItem><ListItemIcon><KeyIcon /></ListItemIcon><ListItemText primary="Copy the Key" secondary="Copy the generated API key (starts with 'sk-ant-')" /></ListItem>
               </List>
             </AccordionDetails>
           </Accordion>
-
           <Accordion>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <ListItemIcon>
-                <KeyIcon />
-              </ListItemIcon>
-              <ListItemText primary="xAI Grok" />
-            </AccordionSummary>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}><ListItemIcon><KeyIcon /></ListItemIcon><ListItemText primary="xAI Grok" /></AccordionSummary>
             <AccordionDetails>
               <List dense>
-                <ListItem>
-                  <ListItemIcon>
-                    <LinkIcon />
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary="Visit xAI Platform" 
-                    secondary="Go to https://console.x.ai/"
-                  />
-                  <IconButton 
-                    size="small" 
-                    onClick={() => openUrl('https://console.x.ai/')}
-                  >
-                    <OpenInNewIcon />
-                  </IconButton>
-                </ListItem>
-                <ListItem>
-                  <ListItemIcon>
-                    <AccountIcon />
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary="Sign in with X/Twitter" 
-                    secondary="Log in using your X (Twitter) account"
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemIcon>
-                    <KeyIcon />
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary="Create API Key" 
-                    secondary="Navigate to 'API Keys' and create a new key"
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemIcon>
-                    <KeyIcon />
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary="Copy the Key" 
-                    secondary="Copy the generated API key"
-                  />
-                </ListItem>
+                <ListItem><ListItemIcon><LinkIcon /></ListItemIcon><ListItemText primary="Visit xAI Platform" secondary="Go to https://console.x.ai/" /><IconButton size="small" onClick={() => openUrl('https://console.x.ai/')}><OpenInNewIcon /></IconButton></ListItem>
+                <ListItem><ListItemIcon><AccountIcon /></ListItemIcon><ListItemText primary="Sign in with X/Twitter" secondary="Log in using your X (Twitter) account" /></ListItem>
+                <ListItem><ListItemIcon><KeyIcon /></ListItemIcon><ListItemText primary="Create API Key" secondary="Navigate to 'API Keys' and create a new key" /></ListItem>
+                <ListItem><ListItemIcon><KeyIcon /></ListItemIcon><ListItemText primary="Copy the Key" secondary="Copy the generated API key" /></ListItem>
               </List>
             </AccordionDetails>
           </Accordion>
-
-          <Alert severity="info" sx={{ mt: 2 }}>
-            <Typography variant="body2">
-              <strong>Security Note:</strong> Your API keys are stored locally in your browser and are only used to make requests to the respective AI services. 
-              Never share your API keys publicly.
-            </Typography>
-          </Alert>
+          <Alert severity="info" sx={{ mt: 2 }}><Typography variant="body2"><strong>Security Note:</strong> Your API keys are stored locally in your browser and are only used to make requests to the respective AI services. Never share your API keys publicly.</Typography></Alert>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowHelp(false)}>Close</Button>
-        </DialogActions>
+        <DialogActions><Button onClick={() => setShowHelp(false)}>Close</Button></DialogActions>
       </Dialog>
-
-      {/* Save Notification */}
-      <Snackbar
-        open={showSaveNotification}
-        autoHideDuration={3000}
-        onClose={() => setShowSaveNotification(false)}
-        message="Settings saved successfully!"
-        action={
-          <IconButton size="small" color="inherit">
-            <CheckIcon />
-          </IconButton>
-        }
-      />
-
-      {/* Copy Notification */}
-      <Snackbar
-        open={showCopied}
-        autoHideDuration={2000}
-        onClose={() => setShowCopied(false)}
-        message="Copied to clipboard!"
-        action={
-          <IconButton size="small" color="inherit">
-            <CheckIcon />
-          </IconButton>
-        }
-      />
+      <Snackbar open={showSaveNotification} autoHideDuration={3000} onClose={() => setShowSaveNotification(false)} message="Settings saved successfully!" action={<IconButton size="small" color="inherit"><CheckIcon /></IconButton>} />
+      <Snackbar open={showCopied} autoHideDuration={2000} onClose={() => setShowCopied(false)} message="Copied to clipboard!" action={<IconButton size="small" color="inherit"><CheckIcon /></IconButton>} />
     </Box>
   );
-}
+};
 
 export default App;
