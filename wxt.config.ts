@@ -1,8 +1,16 @@
 import { defineConfig } from "wxt";
+import { resolve } from "path";
 
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   modules: ["@wxt-dev/module-react"],
+  vite: () => ({
+    resolve: {
+      alias: {
+        "@": resolve(__dirname, "."),
+      },
+    },
+  }),
   manifest: {
     name: "YouTube Transcript Summarizer",
     description: "Extract and summarize YouTube video transcripts using AI",
