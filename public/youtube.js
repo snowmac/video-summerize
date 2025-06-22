@@ -10,17 +10,10 @@ class YouTubeTranscriptService {
         throw new Error("Not on a YouTube video page");
       }
 
-      // Wait for the transcript button to be available
-      await this.waitForTranscriptButton();
-
-      // Click the transcript button to open the transcript panel
-      await this.openTranscriptPanel();
-
-      // Extract the transcript text
+      // Follow the exact sequence from the working script
+      await this.clickMoreButton();
+      await this.clickShowTranscript();
       const transcript = await this.extractTranscriptText();
-
-      // Close the transcript panel
-      await this.closeTranscriptPanel();
 
       return {
         success: true,
@@ -45,145 +38,73 @@ class YouTubeTranscriptService {
     );
   }
 
-  async waitForTranscriptButton() {
-    return new Promise((resolve, reject) => {
-      const maxAttempts = 50;
-      let attempts = 0;
-
-      const checkForButton = () => {
-        attempts++;
-
-        // Look for the transcript button in the description area
-        const transcriptButton = document.querySelector(
-          'button[aria-label*="transcript"], button[aria-label*="Transcript"]'
-        );
-
-        if (transcriptButton) {
-          resolve(transcriptButton);
-          return;
-        }
-
-        if (attempts >= maxAttempts) {
-          reject(new Error("Transcript button not found after 5 seconds"));
-          return;
-        }
-
-        setTimeout(checkForButton, 100);
-      };
-
-      checkForButton();
-    });
-  }
-
-  async openTranscriptPanel() {
-    const transcriptButton = await this.waitForTranscriptButton();
-
-    // Check if transcript panel is already open
-    const transcriptPanel = document.querySelector(
-      '[data-testid="transcript-panel"]'
+  async clickMoreButton() {
+    // Click element with text "...more" if it exists (from original script)
+    const moreElement = Array.from(document.querySelectorAll("*")).find(
+      (el) => el.textContent.trim() === "...more" && el instanceof HTMLElement
     );
-    if (transcriptPanel) {
-      return;
+
+    if (moreElement) {
+      moreElement.click();
+      console.log('Clicked "...more"');
+    } else {
+      console.warn('"...more" not found');
     }
 
-    // Click the transcript button
-    transcriptButton.click();
+    // Wait 3 seconds as in original script
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
 
-    // Wait for the transcript panel to appear
-    await new Promise((resolve, reject) => {
-      const maxAttempts = 50;
-      let attempts = 0;
+  async clickShowTranscript() {
+    // Click element with aria-label="Show transcript" (from original script)
+    const transcriptElement = document.querySelector(
+      '[aria-label="Show transcript"]'
+    );
 
-      const checkForPanel = () => {
-        attempts++;
+    if (transcriptElement) {
+      transcriptElement.click();
+      console.log('Clicked "Show transcript"');
+    } else {
+      throw new Error('"Show transcript" not found');
+    }
 
-        const panel = document.querySelector(
-          '[data-testid="transcript-panel"]'
-        );
-        if (panel) {
-          resolve(panel);
-          return;
-        }
-
-        if (attempts >= maxAttempts) {
-          reject(new Error("Transcript panel did not open"));
-          return;
-        }
-
-        setTimeout(checkForPanel, 100);
-      };
-
-      checkForPanel();
-    });
+    // Wait 1 second as in original script
+    await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
   async extractTranscriptText() {
-    // Wait a bit for the transcript to load
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    // Use the exact approach from original script
+    const container = document.getElementById("segments-container");
 
-    // Find all transcript segments
-    const transcriptSegments = document.querySelectorAll(
-      '[data-testid="transcript-segment"]'
-    );
-
-    if (transcriptSegments.length === 0) {
-      // Fallback: try alternative selectors
-      const fallbackSegments = document.querySelectorAll(
-        ".ytd-transcript-segment-renderer"
-      );
-      if (fallbackSegments.length === 0) {
-        throw new Error("No transcript segments found");
-      }
-      return this.extractFromSegments(fallbackSegments);
+    if (!container) {
+      throw new Error("segments-container not found");
     }
 
-    return this.extractFromSegments(transcriptSegments);
+    const text = this.cleanTextFromContainer(container);
+
+    if (!text) {
+      throw new Error("No text in segments-container");
+    }
+
+    console.log("Extracted transcript text");
+    return text;
   }
 
-  extractFromSegments(segments) {
-    const transcriptParts = [];
-
-    segments.forEach((segment) => {
-      // Get the text content of the segment
-      const textElement =
-        segment.querySelector('[data-testid="transcript-segment-text"]') ||
-        segment.querySelector(".ytd-transcript-segment-renderer-text");
-
-      if (textElement) {
-        const text = textElement.textContent.trim();
-        if (text) {
-          transcriptParts.push(text);
-        }
-      }
-    });
-
-    if (transcriptParts.length === 0) {
-      throw new Error("No transcript text could be extracted");
-    }
-
-    return transcriptParts.join(" ");
-  }
-
-  async closeTranscriptPanel() {
-    // Find and click the close button for the transcript panel
-    const closeButton =
-      document.querySelector(
-        '[data-testid="transcript-panel"] button[aria-label*="Close"]'
-      ) ||
-      document.querySelector(
-        '.ytd-transcript-renderer button[aria-label*="Close"]'
-      );
-
-    if (closeButton) {
-      closeButton.click();
-    }
+  cleanTextFromContainer(container) {
+    if (!container) return "";
+    return container.textContent
+      .trim()
+      .replace(/[\n\r0-9:]+/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   getVideoTitle() {
     const titleElement =
       document.querySelector("h1.ytd-video-primary-info-renderer") ||
       document.querySelector("h1.title") ||
-      document.querySelector("h1");
+      document.querySelector("h1") ||
+      document.querySelector('[data-testid="video-title"]');
 
     return titleElement ? titleElement.textContent.trim() : "Unknown Video";
   }
