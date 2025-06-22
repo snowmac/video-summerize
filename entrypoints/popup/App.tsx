@@ -30,7 +30,8 @@ import {
   ListItemText,
   Accordion,
   AccordionSummary,
-  AccordionDetails
+  AccordionDetails,
+  Chip
 } from '@mui/material';
 import {
   PlayArrow as PlayIcon,
@@ -205,6 +206,8 @@ const App: React.FC = () => {
         summary = await callAnthropic(transcript, apiKey, customPrompt);
       } else if (aiService === 'grok') {
         summary = await callGrok(transcript, apiKey, customPrompt);
+      } else if (aiService === 'huggingface') {
+        summary = await callHuggingFace(transcript, apiKey, customPrompt);
       } else {
         throw new Error(`Unsupported AI service: ${aiService}`);
       }
@@ -327,6 +330,52 @@ const App: React.FC = () => {
     }
   };
 
+  const callHuggingFace = async (transcript: string, apiKey: string, prompt: string): Promise<string> => {
+    try {
+      // Using a good summarization model
+      const model = 'microsoft/DialoGPT-medium'; // You can change this to other models
+      
+      const response = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          inputs: `${prompt}\n\nTranscript:\n${transcript}`,
+          parameters: {
+            max_length: 500,
+            temperature: 0.7,
+            do_sample: true
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`Hugging Face API error (${response.status}): ${errorData.error || response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      // Hugging Face returns different formats depending on the model
+      if (Array.isArray(data) && data.length > 0) {
+        return data[0].generated_text || data[0].summary_text || 'No response from Hugging Face';
+      } else if (data.generated_text) {
+        return data.generated_text;
+      } else if (data.summary_text) {
+        return data.summary_text;
+      } else {
+        return 'No response from Hugging Face';
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('Failed to fetch')) {
+        throw new Error('Network error: Unable to connect to Hugging Face API. Please check your internet connection.');
+      }
+      throw err;
+    }
+  };
+
   const copyTranscript = () => {
     if (transcriptResult?.transcript) {
       navigator.clipboard.writeText(transcriptResult.transcript);
@@ -351,11 +400,23 @@ const App: React.FC = () => {
           </IconButton>
         </Box>
         <Typography variant="subtitle2" sx={{ mb: 1 }}>AI Service</Typography>
-        <select value={aiService} onChange={e => setAiService(e.target.value)} style={{ width: '100%', marginBottom: 16, padding: 8 }}>
-          {AI_SERVICES.map(service => (
-            <option key={service.id} value={service.id}>{service.name}</option>
-          ))}
-        </select>
+        <FormControl fullWidth margin="normal">
+          <InputLabel>AI Service</InputLabel>
+          <Select
+            value={aiService}
+            onChange={(e) => {
+              setAiService(e.target.value);
+              // Clear API key when switching services
+              setApiKey('');
+            }}
+            label="AI Service"
+          >
+            <MenuItem value="openai">OpenAI GPT-4</MenuItem>
+            <MenuItem value="anthropic">Anthropic Claude</MenuItem>
+            <MenuItem value="grok">xAI Grok</MenuItem>
+            <MenuItem value="huggingface">Hugging Face (Free)</MenuItem>
+          </Select>
+        </FormControl>
         <TextField
           fullWidth
           label="API Key"
@@ -472,6 +533,18 @@ const App: React.FC = () => {
                 <ListItem><ListItemIcon><AccountIcon /></ListItemIcon><ListItemText primary="Sign in with X/Twitter" secondary="Log in using your X (Twitter) account" /></ListItem>
                 <ListItem><ListItemIcon><KeyIcon /></ListItemIcon><ListItemText primary="Create API Key" secondary="Navigate to 'API Keys' and create a new key" /></ListItem>
                 <ListItem><ListItemIcon><KeyIcon /></ListItemIcon><ListItemText primary="Copy the Key" secondary="Copy the generated API key" /></ListItem>
+              </List>
+            </AccordionDetails>
+          </Accordion>
+          <Accordion>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}><ListItemIcon><KeyIcon /></ListItemIcon><ListItemText primary="Hugging Face (Free)" /></AccordionSummary>
+            <AccordionDetails>
+              <List dense>
+                <ListItem><ListItemIcon><LinkIcon /></ListItemIcon><ListItemText primary="Visit Hugging Face" secondary="Go to https://huggingface.co/settings/tokens" /><IconButton size="small" onClick={() => openUrl('https://huggingface.co/settings/tokens')}><OpenInNewIcon /></IconButton></ListItem>
+                <ListItem><ListItemIcon><AccountIcon /></ListItemIcon><ListItemText primary="Sign in or Create Account" secondary="Log in to your Hugging Face account or create a new one" /></ListItem>
+                <ListItem><ListItemIcon><KeyIcon /></ListItemIcon><ListItemText primary="Create Access Token" secondary="Click 'New token' and select 'Read' permissions" /></ListItem>
+                <ListItem><ListItemIcon><KeyIcon /></ListItemIcon><ListItemText primary="Copy the Token" secondary="Copy the generated access token (starts with 'hf_')" /></ListItem>
+                <ListItem><ListItemIcon><KeyIcon /></ListItemIcon><ListItemText primary="Free Tier" secondary="30,000 requests per month free" /></ListItem>
               </List>
             </AccordionDetails>
           </Accordion>

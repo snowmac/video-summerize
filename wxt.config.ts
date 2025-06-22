@@ -13,6 +13,7 @@ export default defineConfig({
       "https://api.openai.com/*",
       "https://api.anthropic.com/*",
       "https://api.x.ai/*",
+      "https://api-inference.huggingface.co/*",
     ],
     action: {
       default_popup: "popup.html",
