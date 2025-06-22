@@ -1,0 +1,25 @@
+We have a initalized project with the '' library to create cross browser extensions. Our objective today is to take the youtube-scraper.js file and incorperate it into this project as a chrome extension. We're building a proof of concept. 
+
+Problem:
+- Long videos are hard to watch 
+- Long videos might not contain value to the end user 
+
+Solution: 
+- YouTube script to scrape transcriptions to pipe to an AI for summerization. 
+
+Manual Process:
+
+For two weeks I've used the script to grab the text of the video then run over to grok to summerize it. It works great but it's a super user capability / skill to do. 
+
+Project goals: 
+
+1. Extract the transcript using the existing script but adapted 
+2. The ability to click a button in the browser bar and it will automatically go get the transcript and run it through the default AI then spit output into a markdown formatted page / overlay to see key take aways
+3. Allow the user to configure:
+	- A custom prompt for context
+	- Use the default (Please summerize this video transcript from youtube)
+	- Ability to sign in and call a user's own AI API instance such as the ChatGPT api, grok or claude. 
+
+I want the code to be written in typescript if possible. 
+
+Do you have any questions? 
