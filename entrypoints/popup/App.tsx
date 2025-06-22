@@ -53,7 +53,7 @@ import TranscriptPanel from './TranscriptPanel';
 import SummaryPanel from './SummaryPanel';
 import StatusBar from './StatusBar';
 import MainActions from './MainActions';
-import { invokeAI, AIServiceType } from '../ai';
+import { invokeAI, AIServiceType } from '@/ai';
 
 interface TranscriptResult {
   success: boolean;
