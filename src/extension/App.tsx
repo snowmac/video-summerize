@@ -76,6 +76,7 @@ const App: React.FC = () => {
   const [customPrompt, setCustomPrompt] = useState('Please provide a comprehensive summary of this transcript, highlighting the key points and main topics discussed.');
   const [showCopied, setShowCopied] = useState(false);
   const [showSaveNotification, setShowSaveNotification] = useState(false);
+  const [dynamicHeight, setDynamicHeight] = useState('auto');
 
   useEffect(() => {
     chrome.storage.sync.get(['aiService', 'apiKey', 'customPrompt'], (result: { aiService?: string; apiKey?: string; customPrompt?: string }) => {
@@ -175,12 +176,20 @@ const App: React.FC = () => {
     }
   };
 
+  const resizePopup = () => {
+    if (dynamicHeight === 'auto') {
+      setDynamicHeight('600px');
+    } else {
+      setDynamicHeight('auto');
+    }
+  };
+
   return (
-    <Box sx={{ width: 600, p: 2 }}>
+    <Box sx={{ width: 600, p: 2, height: dynamicHeight }}>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
         <Typography variant="h6" sx={{ flexGrow: 1 }}>YouTube Transcript Summarizer</Typography>
-        <HelpIconButton onClick={() => setShowHelp(true)} />
-        <SettingsIconButton onClick={() => setShowSettings(true)} />
+        <HelpIconButton onClick={() => { resizePopup(); setShowHelp(true); }} />
+        <SettingsIconButton onClick={() => { resizePopup(); setShowSettings(true); }} />
       </Box>
       <StatusBar isLoading={isLoading} status={status} progress={progress} />
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -207,9 +216,9 @@ const App: React.FC = () => {
         onCustomPromptChange={setCustomPrompt}
         onSave={saveSettings}
       />
-      <HelpDialog open={showHelp} onClose={() => setShowHelp(false)} openUrl={openUrl} />
-      <Snackbar open={showSaveNotification} autoHideDuration={3000} onClose={() => setShowSaveNotification(false)} message="Settings saved successfully!" action={<IconButton size="small" color="inherit"><CheckIcon /></IconButton>} />
-      <Snackbar open={showCopied} autoHideDuration={2000} onClose={() => setShowCopied(false)} message="Copied to clipboard!" action={<IconButton size="small" color="inherit"><CheckIcon /></IconButton>} />
+      <HelpDialog open={showHelp} onClose={() => { resizePopup(); setShowHelp(false); }} openUrl={openUrl} />
+      <Snackbar open={showSaveNotification} autoHideDuration={3000} onClose={() => { resizePopup(); setShowSaveNotification(false); }} message="Settings saved successfully!" action={<IconButton size="small" color="inherit"><CheckIcon /></IconButton>} />
+      <Snackbar open={showCopied} autoHideDuration={2000} onClose={() => { resizePopup(); setShowCopied(false); }} message="Copied to clipboard!" action={<IconButton size="small" color="inherit"><CheckIcon /></IconButton>} />
     </Box>
   );
 };
